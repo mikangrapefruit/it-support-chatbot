@@ -30,7 +30,7 @@ PythonとStreamlitを使用して制作した、社内IT問い合わせ対応を
 - Python
 - Streamlit
 - pandas
-- scikit-learn　
+- scikit-learn
 - CSV
 
 ## 4. 自然文検索の仕組み
