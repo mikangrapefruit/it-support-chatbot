@@ -4,7 +4,7 @@ PythonとStreamlitを使用して制作した、社内IT問い合わせ対応を
 
 ※本アプリは学習・ポートフォリオ用の試作品です。FAQはすべて架空の内容です。
 
-## Webアプリを試す
+## Webアプリを試す　
 
 [チャットボットを開く](https://mikangrapefruit-it-support.streamlit.app/)
 
