@@ -7,12 +7,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 # ページの設定
 st.set_page_config(
     page_title="社内ITサポート",
-    page_icon="💻"
 )
 
-st.title("💻 社内ITサポートチャットボット")
+st.title("社内ITサポートチャットボット")
 
-st.write("こんにちは！社内ITに関するお困りごとをサポートします。")
+st.write("社内ITに関するお困りごとをサポートします。")
 st.caption("※このアプリは架空の社内IT環境を想定した試作品です。")
 
 # FAQデータの読み込み
