@@ -1,7 +1,4 @@
-"""社内ITサポート FAQ検索アプリ（ポートフォリオ用デモ）。
-
-既存の faq.csv / requirements.txt をそのまま利用します。
-検索方式と類似度の閾値は元のアプリと同じです。
+"""社内ITサポート FAQ検索アプリ
 """
 
 from html import escape
