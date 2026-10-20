@@ -1,5 +1,4 @@
-"""社内ITサポート FAQ検索アプリ
-"""
+"""社内ITサポート FAQ検索アプリ"""
 
 from html import escape
 from pathlib import Path
@@ -16,7 +15,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# このアプリ専用のスタイル。既存のFAQ検索ロジックには影響しません。
 st.markdown(
     """
     <style>
@@ -212,7 +210,7 @@ def display_answer(row: pd.Series, label: str = "検索結果") -> None:
 
 
 def search_question(question: str, data: pd.DataFrame) -> int | None:
-    """元のアプリと同じ日本語文字n-gram検索と閾値0.30。"""
+    """日本語文字n-gram検索と閾値0.30。"""
     vectorizer = TfidfVectorizer(analyzer="char", ngram_range=(2, 3))
     vectors = vectorizer.fit_transform(data["question"].astype(str))
     question_vector = vectorizer.transform([question.strip()])
