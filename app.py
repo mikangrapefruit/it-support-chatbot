@@ -189,7 +189,7 @@ def clean(value: object) -> str:
 
 
 def display_answer(row: pd.Series, label: str = "検索結果") -> None:
-    """チャットの吹き出しではなく、社内FAQ風の結果パネルを表示する。"""
+    
     answer_text = clean(row["answer"]).replace("\n", "<br>")
     st.markdown(
         f"""
@@ -235,13 +235,6 @@ st.markdown(
     <div class="page-intro">
       <h1>社内ITサポート</h1>
       <p>パソコンやネットワーク、アカウントなどのお困りごとをFAQから確認できます。</p>
-      <div class="intro-meta">
-        <span class="meta-pill">登録FAQ {len(faq)}件</span>
-        <span class="meta-separator">|</span>
-        <span>{faq['category'].nunique()}カテゴリ</span>
-        <span class="meta-separator">|</span>
-        <span>デモ環境</span>
-      </div>
     </div>
     """,
     unsafe_allow_html=True,
