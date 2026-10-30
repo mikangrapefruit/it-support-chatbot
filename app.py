@@ -8,6 +8,8 @@ import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+from manual_search import ManualHit, load_manuals, search_manuals
+
 
 st.set_page_config(
     page_title="社内ITサポート | FAQ検索",
@@ -219,7 +221,50 @@ def search_question(question: str, data: pd.DataFrame) -> int | None:
     return best_index if scores[best_index] >= 0.30 else None
 
 
+MANUAL_DIRECTORY = Path(__file__).resolve().parent / "manuals"
+
+
+def manual_file_signature() -> tuple[tuple[str, int, int], ...]:
+    """PDFを追加・更新した時にキャッシュを更新する。"""
+    if not MANUAL_DIRECTORY.exists():
+        return ()
+    return tuple(
+        (path.name, path.stat().st_size, path.stat().st_mtime_ns)
+        for path in sorted(MANUAL_DIRECTORY.glob("*.pdf"))
+    )
+
+
+@st.cache_data(show_spinner=False)
+def cached_manuals(signature: tuple[tuple[str, int, int], ...]):
+    # signature はキャッシュの更新判定に利用する。
+    return load_manuals(MANUAL_DIRECTORY)
+
+
+def display_manual_hit(hit: ManualHit) -> None:
+    """マニュアルの抜粋を、文書名・ページ番号とともに表示する。"""
+    text = clean(hit.chunk.text)
+    st.markdown(
+        f"""
+        <div class="answer-card">
+          <div class="answer-head">
+            <span class="answer-eyebrow">マニュアルの該当箇所</span>
+            <span class="answer-category">PDF資料</span>
+          </div>
+          <div class="answer-question">{clean(hit.chunk.filename)}</div>
+          <hr class="answer-rule">
+          <div class="answer-label">該当する記載（抜粋）</div>
+          <p class="answer-body">{text}</p>
+          <div class="answer-source">参照元　<strong>{clean(hit.chunk.filename)}</strong>
+          ／ {hit.chunk.page}ページ</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 faq = load_faq()
+manual_signature = manual_file_signature()
+manual_chunks, manual_warnings = cached_manuals(manual_signature)
 
 st.markdown(
     """
@@ -234,7 +279,14 @@ st.markdown(
     f"""
     <div class="page-intro">
       <h1>社内ITサポート</h1>
-      <p>パソコンやネットワーク、アカウントなどのお困りごとをFAQから確認できます。</p>
+      <p>パソコンやネットワーク、アカウントなどのお困りごとをFAQとマニュアルから確認できます。</p>
+      <div class="intro-meta">
+        <span class="meta-pill">登録FAQ {len(faq)}件</span>
+        <span class="meta-separator">|</span>
+        <span class="meta-pill">登録PDF {len(manual_signature)}件</span>
+        <span class="meta-separator">|</span>
+        <span>デモ環境</span>
+      </div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -247,7 +299,7 @@ search_tab, category_tab, list_tab = st.tabs(
 with search_tab:
     st.markdown('<div class="section-title">キーワードから調べる</div>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="section-description">現在の状況やエラーメッセージなどを入力してください。登録済みのFAQから近い内容を検索します。</p>',
+        '<p class="section-description">現在の状況やエラーメッセージなどを入力してください。FAQと事前登録済みのPDFマニュアルを検索します。</p>',
         unsafe_allow_html=True,
     )
 
@@ -256,7 +308,7 @@ with search_tab:
             "問い合わせ内容",
             placeholder="例：VPNに接続できない",
         )
-        submitted = st.form_submit_button("FAQを検索", type="primary")
+        submitted = st.form_submit_button("FAQ・マニュアルを検索", type="primary")
 
     st.markdown(
         '<div class="helper-note">検索例：パスワードを忘れた ／ メールが送信できない ／ 印刷ができない</div>',
@@ -265,26 +317,38 @@ with search_tab:
 
     if submitted:
         if not query.strip():
-            st.session_state.keyword_result = {"type": "blank"}
+            st.session_state.keyword_result = {"type": "blank", "query": ""}
         else:
             found = search_question(query, faq)
             st.session_state.keyword_result = (
-                {"type": "found", "index": found}
+                {"type": "found", "index": found, "query": query.strip()}
                 if found is not None
-                else {"type": "not_found"}
+                else {"type": "not_found", "query": query.strip()}
             )
 
     keyword_result = st.session_state.get("keyword_result")
     if keyword_result:
+        manual_hits = []
         if keyword_result["type"] == "found":
             display_answer(faq.iloc[keyword_result["index"]])
         elif keyword_result["type"] == "blank":
             st.warning("問い合わせ内容を入力してください。")
-        else:
+        if keyword_result["type"] != "blank":
+            manual_hits = search_manuals(keyword_result.get("query", ""), manual_chunks)
+            if manual_hits:
+                st.markdown(
+                    '<div class="section-title" style="margin-top:25px">関連するマニュアル</div>',
+                    unsafe_allow_html=True,
+                )
+                st.caption("登録済みPDFから検索した文章の抜粋です。内容は参照元のページで確認してください。")
+                for hit in manual_hits:
+                    display_manual_hit(hit)
+
+        if keyword_result["type"] == "not_found" and not manual_hits:
             st.markdown(
                 """
                 <div class="empty-result">
-                  <div class="empty-result-title">該当するFAQが見つかりませんでした</div>
+                  <div class="empty-result-title">該当するFAQ・マニュアルが見つかりませんでした</div>
                   <div class="empty-result-body">
                     別の言葉で検索するか、「カテゴリから探す」をお試しください。<br>
                     解決しない場合はIT担当者にお問い合わせください。
@@ -293,6 +357,11 @@ with search_tab:
                 """,
                 unsafe_allow_html=True,
             )
+
+if manual_warnings:
+    with st.expander("PDF読み込みのお知らせ"):
+        for warning in manual_warnings:
+            st.warning(warning)
 
 with category_tab:
     st.markdown('<div class="section-title">カテゴリから調べる</div>', unsafe_allow_html=True)
@@ -353,7 +422,7 @@ st.markdown(
     """
     <div class="app-footer">
       このアプリは社内ITサポートを想定したポートフォリオ用の試作品です。<br>
-      FAQおよび参照資料はすべて架空の内容です。
+      FAQおよびPDFマニュアルはすべて架空の内容です。実在の企業の操作手順ではありません。
     </div>
     """,
     unsafe_allow_html=True,
