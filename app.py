@@ -211,14 +211,33 @@ def display_answer(row: pd.Series, label: str = "検索結果") -> None:
     )
 
 
-def search_question(question: str, data: pd.DataFrame) -> int | None:
-    """日本語文字n-gram検索と閾値0.30。"""
+FAQ_SEARCH_ALIASES = {
+    "パソコンが起動しません": ("電源が入らない", "電源がつかない"),
+    "パソコンの動作が遅いです": ("パソコンが重い", "動作がもたつく"),
+    "メールを受信できません": ("メールが届かない", "受信メールが来ない"),
+}
+
+
+def search_questions(question: str, data: pd.DataFrame, limit: int = 3) -> list[int]:
+    """質問文と言い換え表現から、関連するFAQを最大3件返す。"""
+    search_texts = []
+    owners = []
+    for index, faq_question in enumerate(data["question"].astype(str)):
+        for text in (faq_question, *FAQ_SEARCH_ALIASES.get(faq_question, ())):
+            search_texts.append(text)
+            owners.append(index)
+
     vectorizer = TfidfVectorizer(analyzer="char", ngram_range=(2, 3))
-    vectors = vectorizer.fit_transform(data["question"].astype(str))
+    vectors = vectorizer.fit_transform(search_texts)
     question_vector = vectorizer.transform([question.strip()])
-    scores = cosine_similarity(question_vector, vectors)[0]
-    best_index = int(scores.argmax())
-    return best_index if scores[best_index] >= 0.30 else None
+    text_scores = cosine_similarity(question_vector, vectors)[0]
+    scores = [0.0] * len(data)
+    for owner, score in zip(owners, text_scores):
+        scores[owner] = max(scores[owner], float(score))
+    ranked = sorted(range(len(scores)), key=lambda index: scores[index], reverse=True)
+    if not ranked or scores[ranked[0]] < 0.30:
+        return []
+    return [index for index in ranked if scores[index] >= 0.15][:limit]
 
 
 MANUAL_DIRECTORY = Path(__file__).resolve().parent / "manuals"
@@ -319,10 +338,10 @@ with search_tab:
         if not query.strip():
             st.session_state.keyword_result = {"type": "blank", "query": ""}
         else:
-            found = search_question(query, faq)
+            found = search_questions(query, faq)
             st.session_state.keyword_result = (
-                {"type": "found", "index": found, "query": query.strip()}
-                if found is not None
+                {"type": "found", "indices": found, "query": query.strip(), "selected_index": None}
+                if found
                 else {"type": "not_found", "query": query.strip()}
             )
 
@@ -330,7 +349,21 @@ with search_tab:
     if keyword_result:
         manual_hits = []
         if keyword_result["type"] == "found":
-            display_answer(faq.iloc[keyword_result["index"]])
+            st.markdown(
+                '<div class="section-title" style="margin-top:25px">関連するFAQ</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption("近い内容の質問を最大3件表示しています。該当する質問を選んでください。")
+            for candidate_index in keyword_result["indices"]:
+                candidate = faq.iloc[candidate_index]
+                with st.container(border=True):
+                    st.markdown(f"**{clean(candidate['question'])}**")
+                    st.caption(f"カテゴリ：{candidate['category']}")
+                    if st.button("この質問の回答を見る", key=f"keyword_faq_{candidate_index}"):
+                        st.session_state.keyword_result["selected_index"] = candidate_index
+            selected_index = keyword_result.get("selected_index")
+            if selected_index in keyword_result["indices"]:
+                display_answer(faq.iloc[selected_index], label="選択したFAQの回答")
         elif keyword_result["type"] == "blank":
             st.warning("問い合わせ内容を入力してください。")
         if keyword_result["type"] != "blank":
