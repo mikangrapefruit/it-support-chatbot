@@ -143,6 +143,33 @@ st.markdown(
     }
     .answer-source strong { color: #506477; font-weight: 600; }
 
+    .manual-card {
+        background: #fff; border: 1px solid var(--border);
+        border-radius: 10px; margin: 13px 0; padding: 20px 23px 17px;
+    }
+    .manual-meta {
+        display: flex; justify-content: space-between; align-items: center;
+        flex-wrap: wrap; gap: 8px; margin-bottom: 10px;
+        font-size: 12px; color: #60788e;
+    }
+    .manual-page {
+        border-radius: 4px; padding: 4px 8px;
+        background: #edf3f7; color: #355b76; font-weight: 650;
+    }
+    .manual-heading {
+        color: #1e3b53; font-size: 17px; font-weight: 750;
+        margin: 0 0 13px; line-height: 1.55;
+    }
+    .manual-steps {
+        list-style: disc; margin: 0 0 14px; padding-left: 1.3rem;
+        color: #2c4154; font-size: 14px; line-height: 1.85;
+    }
+    .manual-steps li { margin-bottom: 8px; padding-left: 3px; }
+    .manual-source {
+        border-top: 1px solid #edf0f3; padding-top: 12px;
+        color: #768697; font-size: 12px; overflow-wrap: anywhere;
+    }
+
     .empty-result {
         background: #fff; border: 1px solid var(--border);
         border-radius: 10px; padding: 21px 24px; margin-top: 22px;
@@ -260,21 +287,21 @@ def cached_manuals(signature: tuple[tuple[str, int, int], ...]):
 
 
 def display_manual_hit(hit: ManualHit) -> None:
-    """マニュアルの抜粋を、文書名・ページ番号とともに表示する。"""
-    text = clean(hit.chunk.text)
+    """PDFの該当する節を見出し・箇条書き・ページ番号つきで表示する。"""
+    items = [line.strip() for line in hit.chunk.text.splitlines() if line.strip()]
+    steps_html = "".join(
+        f"<li>{clean(line.lstrip('・●•- '))}</li>" for line in items
+    )
     st.markdown(
         f"""
-        <div class="answer-card">
-          <div class="answer-head">
-            <span class="answer-eyebrow">マニュアルの該当箇所</span>
-            <span class="answer-category">PDF資料</span>
+        <div class="manual-card">
+          <div class="manual-meta">
+            <span>{clean(hit.chunk.topic)}</span>
+            <span class="manual-page">{hit.chunk.page}ページ</span>
           </div>
-          <div class="answer-question">{clean(hit.chunk.filename)}</div>
-          <hr class="answer-rule">
-          <div class="answer-label">該当する記載（抜粋）</div>
-          <p class="answer-body">{text}</p>
-          <div class="answer-source">参照元　<strong>{clean(hit.chunk.filename)}</strong>
-          ／ {hit.chunk.page}ページ</div>
+          <div class="manual-heading">{clean(hit.chunk.heading)}</div>
+          <ul class="manual-steps">{steps_html}</ul>
+          <div class="manual-source">参照元：{clean(hit.chunk.filename)}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -373,9 +400,24 @@ with search_tab:
                     '<div class="section-title" style="margin-top:25px">関連するマニュアル</div>',
                     unsafe_allow_html=True,
                 )
-                st.caption("登録済みPDFから検索した文章の抜粋です。内容は参照元のページで確認してください。")
+                st.caption("該当する手順を項目別に表示しています。原本は下のボタンから確認できます。")
                 for hit in manual_hits:
                     display_manual_hit(hit)
+                displayed_files = set()
+                for index, hit in enumerate(manual_hits):
+                    filename = hit.chunk.filename
+                    if filename in displayed_files:
+                        continue
+                    displayed_files.add(filename)
+                    pdf_path = MANUAL_DIRECTORY / filename
+                    if pdf_path.is_file():
+                        st.download_button(
+                            label=f"PDF全文をダウンロード：{filename}",
+                            data=pdf_path.read_bytes(),
+                            file_name=filename,
+                            mime="application/pdf",
+                            key=f"manual_pdf_download_{index}",
+                        )
 
         if keyword_result["type"] == "not_found" and not manual_hits:
             st.markdown(
